@@ -1,22 +1,176 @@
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// Three.js Scene Setup
+let scene, camera, renderer;
+let shipMesh, moonMesh;
+let particles = [];
+let starField;
 
+function initThreeJS() {
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.fog = new THREE.Fog(0x000000, 5000, 10000);
+
+    // Camera
+    camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        10000
+    );
+    camera.position.z = 50;
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.getElementById('gameContainer').appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(5, 10, 7);
+    scene.add(directionalLight);
+
+    // Create Starfield
+    createStarfield();
+
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize);
+}
+
+function createStarfield() {
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 1000;
+    const positions = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount * 3; i += 3) {
+        positions[i] = (Math.random() - 0.5) * 20000;
+        positions[i + 1] = (Math.random() - 0.5) * 20000;
+        positions[i + 2] = (Math.random() - 0.5) * 20000;
+    }
+
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const starMaterial = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 15,
+        sizeAttenuation: true
+    });
+
+    starField = new THREE.Points(starGeometry, starMaterial);
+    scene.add(starField);
+}
+
+function createShip(color) {
+    if (shipMesh) scene.remove(shipMesh);
+
+    const group = new THREE.Group();
+
+    // Main body (cone shape)
+    const coneGeometry = new THREE.ConeGeometry(8, 30, 8);
+    const shipMaterial = new THREE.MeshPhongMaterial({ color: color, emissive: color, emissiveIntensity: 0.5 });
+    const cone = new THREE.Mesh(coneGeometry, shipMaterial);
+    cone.rotation.z = Math.PI / 2;
+    group.add(cone);
+
+    // Thrusters (small cubes on sides)
+    const thrusterGeometry = new THREE.BoxGeometry(3, 3, 8);
+    const thrusterMaterial = new THREE.MeshPhongMaterial({ color: 0xff6600 });
+
+    const thruster1 = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
+    thruster1.position.set(10, 5, 0);
+    group.add(thruster1);
+
+    const thruster2 = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
+    thruster2.position.set(10, -5, 0);
+    group.add(thruster2);
+
+    // Glow effect
+    const glowGeometry = new THREE.SphereGeometry(12, 32, 32);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.2
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    group.add(glow);
+
+    scene.add(group);
+    shipMesh = group;
+    return group;
+}
+
+function createMoon() {
+    if (moonMesh) scene.remove(moonMesh);
+
+    const moonGeometry = new THREE.SphereGeometry(80, 32, 32);
+    const moonMaterial = new THREE.MeshPhongMaterial({
+        color: 0xcccccc,
+        emissive: 0x333333,
+        shininess: 5
+    });
+
+    moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+    moonMesh.castShadow = true;
+    moonMesh.receiveShadow = true;
+    scene.add(moonMesh);
+
+    return moonMesh;
+}
+
+function createParticle(position, color, velocity) {
+    const particleGeometry = new THREE.SphereGeometry(2, 8, 8);
+    const particleMaterial = new THREE.MeshBasicMaterial({ color: color });
+    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+
+    particle.position.copy(position);
+    particle.velocity = velocity;
+    particle.life = 30;
+    particle.maxLife = 30;
+
+    scene.add(particle);
+    particles.push(particle);
+
+    return particle;
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+
+        p.position.add(p.velocity);
+        p.life--;
+
+        p.material.opacity = p.life / p.maxLife;
+
+        if (p.life <= 0) {
+            scene.remove(p);
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// Game Logic
 const SHIPS = {
-    nebulaStar: { name: 'Nebula StarShip', speed: 2, acceleration: 0.3, turnRate: 2, fuel: 1000, fuelConsume: 0.2, color: '#0f0' },
-    nebulaPro: { name: 'Nebula ProShip', speed: 3, acceleration: 0.4, turnRate: 2.5, fuel: 800, fuelConsume: 0.25, color: '#0ff' },
-    quantamStar: { name: 'QuantamStarship', speed: 5, acceleration: 0.6, turnRate: 3, fuel: 600, fuelConsume: 0.3, color: '#f0f' },
-    quantamPro: { name: 'QuantamProShip', speed: 7, acceleration: 0.8, turnRate: 3.5, fuel: 400, fuelConsume: 0.4, color: '#ff0' }
+    nebulaStar: { name: 'Nebula StarShip', speed: 2, acceleration: 0.3, turnRate: 2, fuel: 1000, fuelConsume: 0.2, color: 0x00ff00 },
+    nebulaPro: { name: 'Nebula ProShip', speed: 3, acceleration: 0.4, turnRate: 2.5, fuel: 800, fuelConsume: 0.25, color: 0x00ffff },
+    quantamStar: { name: 'QuantamStarship', speed: 5, acceleration: 0.6, turnRate: 3, fuel: 600, fuelConsume: 0.3, color: 0xff00ff },
+    quantamPro: { name: 'QuantamProShip', speed: 7, acceleration: 0.8, turnRate: 3.5, fuel: 400, fuelConsume: 0.4, color: 0xffff00 }
 };
 
-const game = {
+const gameInstance = {
     ship: null,
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    vx: 0,
-    vy: 0,
-    angle: 0,
+    position: new THREE.Vector3(0, 0, 0),
+    velocity: new THREE.Vector3(0, 0, 0),
+    rotation: new THREE.Euler(0, 0, 0),
     roll: 0,
     fuel: 1000,
     maxFuel: 1000,
@@ -26,47 +180,37 @@ const game = {
     moonVisits: 0,
     keys: {},
     upgrades: { fuel: 0, speed: 0, turnRate: 0 },
-    particles: [],
-    stars: [],
     moonVisible: false,
-    moonX: 0,
-    moonY: 0,
+    moonPosition: new THREE.Vector3(0, 0, 0),
 
     selectShip(shipKey) {
         this.ship = { ...SHIPS[shipKey], key: shipKey };
         this.fuel = this.ship.fuel;
         this.maxFuel = this.ship.fuel;
-        this.x = canvas.width / 2;
-        this.y = canvas.height / 2;
-        this.vx = 0;
-        this.vy = 0;
-        this.angle = 0;
+        this.position.set(0, 0, 0);
+        this.velocity.set(0, 0, 0);
+        this.rotation.set(0, 0, 0);
         this.roll = 0;
         this.altitude = 0;
         this.credits = 0;
         this.level = 1;
         this.moonVisits = 0;
-        this.particles = [];
         this.upgrades = { fuel: 0, speed: 0, turnRate: 0 };
+
+        // Clear old particles
+        particles.forEach(p => scene.remove(p));
+        particles = [];
+
+        // Create 3D ship
+        const colorHex = this.ship.color;
+        createShip(colorHex);
+
         document.getElementById('shipSelect').style.display = 'none';
-        this.generateStars();
         this.updateUI();
     },
 
     changeShip() {
         document.getElementById('shipSelect').style.display = 'block';
-    },
-
-    generateStars() {
-        this.stars = [];
-        for (let i = 0; i < 200; i++) {
-            this.stars.push({
-                x: Math.random() * canvas.width * 4 - canvas.width * 2,
-                y: Math.random() * canvas.height * 4 - canvas.height * 2,
-                size: Math.random() * 1.5,
-                opacity: Math.random() * 0.7 + 0.3
-            });
-        }
     },
 
     buyUpgrade(type) {
@@ -91,182 +235,101 @@ const game = {
         const speedMult = 1 + (this.upgrades.speed * 0.2);
         const turnMult = 1 + (this.upgrades.turnRate * 0.1);
 
-        // W/A/S/D Movement
+        // Forward/Backward movement
         if (this.keys['w']) {
-            this.vx += Math.cos(this.angle) * this.ship.acceleration * speedMult;
-            this.vy += Math.sin(this.angle) * this.ship.acceleration * speedMult;
+            const forward = new THREE.Vector3(0, 0, 1).applyEuler(this.rotation);
+            this.velocity.addScaledVector(forward, this.ship.acceleration * speedMult);
         }
         if (this.keys['s']) {
-            this.vx -= Math.cos(this.angle) * this.ship.acceleration * speedMult * 0.5;
-            this.vy -= Math.sin(this.angle) * this.ship.acceleration * speedMult * 0.5;
+            const forward = new THREE.Vector3(0, 0, 1).applyEuler(this.rotation);
+            this.velocity.addScaledVector(forward, -this.ship.acceleration * speedMult * 0.5);
         }
-        if (this.keys['a']) this.angle -= (this.ship.turnRate * turnMult) * Math.PI / 180;
-        if (this.keys['d']) this.angle += (this.ship.turnRate * turnMult) * Math.PI / 180;
 
-        // Q/E Roll - Pure visual effect, no movement
+        // Rotation (Pitch & Yaw)
+        if (this.keys['a']) this.rotation.y += (this.ship.turnRate * turnMult) * Math.PI / 180;
+        if (this.keys['d']) this.rotation.y -= (this.ship.turnRate * turnMult) * Math.PI / 180;
+
+        // Roll (visual only)
         if (this.keys['q']) this.roll -= 8;
         if (this.keys['e']) this.roll += 8;
 
-        // SPACE Boost - accelerate faster
+        // Boost
         if (this.keys[' ']) {
-            this.vx *= 1.05;
-            this.vy *= 1.05;
+            this.velocity.multiplyScalar(1.05);
             this.fuel -= 2;
         }
 
-        // SHIFT - Suction/Descend - pull downward faster
+        // Suction (downward pull)
         if (this.keys['shift']) {
-            this.vy += 0.8; // Strong downward pull
+            this.velocity.y += 0.8;
             this.fuel -= 1.5;
         }
 
         // Apply friction
-        this.vx *= 0.98;
-        this.vy *= 0.98;
-        this.roll *= 0.92; // Smooth roll animation
+        this.velocity.multiplyScalar(0.98);
+        this.roll *= 0.92;
 
         // Fuel consumption
-        if (this.keys['w'] || this.keys['s']) this.fuel -= this.ship.fuelConsume + (this.upgrades.fuel * 0.01);
+        if (this.keys['w'] || this.keys['s']) {
+            this.fuel -= this.ship.fuelConsume + (this.upgrades.fuel * 0.01);
+        }
 
         // Update position
-        this.x += this.vx;
-        this.y += this.vy;
+        this.position.add(this.velocity);
 
         // Calculate altitude
-        this.altitude = Math.sqrt((this.x - canvas.width / 2) ** 2 + (this.y - canvas.height / 2) ** 2);
+        this.altitude = this.position.length();
         if (this.altitude > 3000) this.moonVisible = true;
 
         // Moon collision
         if (this.moonVisible) {
-            const angle = Math.atan2(this.y - canvas.height / 2, this.x - canvas.width / 2);
-            this.moonX = canvas.width / 2 + Math.cos(angle) * 2000;
-            this.moonY = canvas.height / 2 + Math.sin(angle) * 2000;
+            const direction = this.position.clone().normalize();
+            this.moonPosition.copy(direction).multiplyScalar(2000);
 
-            const distToMoon = Math.sqrt((this.x - this.moonX) ** 2 + (this.y - this.moonY) ** 2);
+            if (!moonMesh) createMoon();
+            moonMesh.position.copy(this.moonPosition);
+
+            const distToMoon = this.position.distanceTo(this.moonPosition);
             if (distToMoon < 100) {
                 this.moonVisits++;
                 this.credits += this.level * 1000;
                 this.level += 1;
-                this.x = canvas.width / 2;
-                this.y = canvas.height / 2;
-                this.vx = 0;
-                this.vy = 0;
+                this.position.set(0, 0, 0);
+                this.velocity.set(0, 0, 0);
                 this.fuel = this.maxFuel;
                 this.moonVisible = false;
+                if (moonMesh) scene.remove(moonMesh);
             }
         }
 
         // Fuel management
         this.fuel = Math.max(0, this.fuel);
         if (this.fuel === 0) {
-            this.vx *= 0.95;
-            this.vy *= 0.95;
+            this.velocity.multiplyScalar(0.95);
         }
 
         // Passive income
         this.credits += this.level * 0.01 * (this.altitude / 1000 + 1);
 
-        // Update particles
-        for (let p of this.particles) {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.life--;
+        // Update ship mesh
+        if (shipMesh) {
+            shipMesh.position.copy(this.position);
+            shipMesh.rotation.copy(this.rotation);
+            shipMesh.rotation.z = this.roll * Math.PI / 180;
         }
-        this.particles = this.particles.filter(p => p.life > 0);
 
-        // Particle effects on thrust
+        // Create particles
         if ((this.keys['w'] || this.keys[' '] || this.keys['shift']) && Math.random() < 0.3) {
-            const particleColor = this.keys[' '] ? '#ff0' : (this.keys['shift'] ? '#f00' : '#0ff');
-            this.particles.push({
-                x: this.x - Math.cos(this.angle) * 15,
-                y: this.y - Math.sin(this.angle) * 15,
-                vx: (Math.random() - 0.5) * 2 - Math.cos(this.angle) * 1,
-                vy: (Math.random() - 0.5) * 2 - Math.sin(this.angle) * 1,
-                life: 30,
-                color: particleColor
-            });
+            const particleColor = this.keys[' '] ? 0xffff00 : (this.keys['shift'] ? 0xff0000 : 0x00ffff);
+            const backward = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
+            const particlePos = this.position.clone().addScaledVector(backward, 20);
+            const particleVel = this.velocity.clone().multiplyScalar(0.5);
+            particleVel.addScaledVector(backward, -2);
+            createParticle(particlePos, particleColor, particleVel);
         }
 
+        updateParticles();
         this.updateUI();
-    },
-
-    draw() {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        if (!this.ship) {
-            ctx.fillStyle = '#0ff';
-            ctx.font = 'bold 20px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('SELECT YOUR SHIP TO BEGIN', canvas.width / 2, canvas.height / 2);
-            return;
-        }
-
-        const camX = this.x - canvas.width / 2;
-        const camY = this.y - canvas.height / 2;
-
-        // Draw stars
-        ctx.fillStyle = '#333';
-        for (let star of this.stars) {
-            const sx = star.x - camX;
-            const sy = star.y - camY;
-            ctx.globalAlpha = star.opacity;
-            ctx.fillRect(sx, sy, star.size, star.size);
-        }
-        ctx.globalAlpha = 1;
-
-        // Draw moon
-        if (this.moonVisible) {
-            const moonScreenX = this.moonX - camX;
-            const moonScreenY = this.moonY - camY;
-            ctx.fillStyle = '#ccc';
-            ctx.beginPath();
-            ctx.arc(moonScreenX, moonScreenY, 60, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#999';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        }
-
-        // Draw particles
-        for (let p of this.particles) {
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life / 30;
-            ctx.fillRect(p.x - camX, p.y - camY, 3, 3);
-        }
-        ctx.globalAlpha = 1;
-
-        // Draw ship at center
-        const shipScreenX = canvas.width / 2;
-        const shipScreenY = canvas.height / 2;
-
-        ctx.save();
-        ctx.translate(shipScreenX, shipScreenY);
-        ctx.rotate(this.angle);
-        
-        // Apply roll for cool visual effect only
-        ctx.rotate((this.roll * Math.PI) / 180 * 0.5);
-
-        ctx.fillStyle = this.ship.color;
-        ctx.beginPath();
-        ctx.moveTo(20, 0);
-        ctx.lineTo(-10, -10);
-        ctx.lineTo(-5, 0);
-        ctx.lineTo(-10, 10);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.restore();
-
-        // Draw HUD
-        ctx.fillStyle = '#0ff';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText(`Fuel: ${Math.floor(this.fuel)}/${Math.floor(this.maxFuel)}`, 10, canvas.height - 10);
     },
 
     updateUI() {
@@ -275,7 +338,7 @@ const game = {
         document.getElementById('level').textContent = this.level;
         document.getElementById('fuel').textContent = Math.floor((this.fuel / this.maxFuel) * 100) + '%';
         document.getElementById('altitude').textContent = Math.floor(this.altitude);
-        document.getElementById('speed').textContent = Math.floor(Math.sqrt(this.vx ** 2 + this.vy ** 2));
+        document.getElementById('speed').textContent = Math.floor(this.velocity.length());
         document.getElementById('moonVisits').textContent = this.moonVisits;
 
         const fuelCost = Math.floor(100 * Math.pow(1.5, this.upgrades.fuel));
@@ -288,25 +351,31 @@ const game = {
 };
 
 // Event Listeners
-document.addEventListener('keydown', (e) => { 
+document.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
-    if (key === ' ') e.preventDefault(); // Prevent page scroll
-    game.keys[key] = true;
+    if (key === ' ') e.preventDefault();
+    gameInstance.keys[key] = true;
 });
 
-document.addEventListener('keyup', (e) => { 
-    game.keys[e.key.toLowerCase()] = false; 
+document.addEventListener('keyup', (e) => {
+    gameInstance.keys[e.key.toLowerCase()] = false;
 });
 
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
+// Initialize and start game loop
+initThreeJS();
 
-// Game Loop
 function gameLoop() {
-    game.update();
-    game.draw();
+    gameInstance.update();
+
+    // Update camera to follow ship
+    if (shipMesh) {
+        const cameraOffset = new THREE.Vector3(0, 30, 60);
+        const worldPos = cameraOffset.clone().applyEuler(gameInstance.rotation);
+        camera.position.lerp(gameInstance.position.clone().add(worldPos), 0.1);
+        camera.lookAt(gameInstance.position);
+    }
+
+    renderer.render(scene, camera);
     requestAnimationFrame(gameLoop);
 }
 
