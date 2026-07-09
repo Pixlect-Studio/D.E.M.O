@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket Empire - Space Idle Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; overflow: hidden; background: #000; }
+        #gameContainer { width: 100vw; height: 100vh; position: relative; background: radial-gradient(ellipse at center, #1a0033 0%, #000 100%); }
+        #canvas { display: block; width: 100%; height: 100%; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #0ff; font-size: 14px; z-index: 100; text-shadow: 0 0 10px #0ff; font-weight: bold; }
+        .stat { margin: 8px 0; }
+        .stat-label { color: #0f0; }
+        .stat-value { color: #0ff; }
+        #shipSelect { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.95); border: 2px solid #0ff; padding: 40px; border-radius: 10px; z-index: 200; text-align: center; display: none; }
+        #shipSelect h1 { color: #0ff; margin-bottom: 30px; text-shadow: 0 0 15px #0ff; }
+        .shipOption { margin: 20px 0; padding: 15px; background: rgba(0, 255, 255, 0.1); border: 2px solid #0ff; cursor: pointer; border-radius: 5px; transition: 0.3s; color: #0ff; font-weight: bold; }
+        .shipOption:hover { background: rgba(0, 255, 255, 0.3); transform: scale(1.05); }
+        .shipStats { font-size: 12px; color: #0f0; margin-top: 5px; }
+        #upgradePanel { position: absolute; bottom: 20px; right: 20px; background: rgba(0, 0, 0, 0.9); border: 2px solid #0ff; padding: 20px; border-radius: 10px; z-index: 100; max-width: 300px; color: #0ff; }
+        .upgradeItem { margin: 10px 0; padding: 8px; background: rgba(0, 255, 255, 0.1); border-left: 3px solid #0ff; cursor: pointer; transition: 0.2s; }
+        .upgradeItem:hover { background: rgba(0, 255, 255, 0.2); }
+        .upgradeCost { font-size: 12px; color: #0f0; }
+        .controls { position: absolute; bottom: 20px; left: 20px; background: rgba(0, 0, 0, 0.8); border: 2px solid #0ff; padding: 15px; border-radius: 5px; color: #0ff; font-size: 12px; z-index: 100; }
+        .control-line { margin: 5px 0; }
+        #stars { position: absolute; width: 100%; height: 100%; }
+        .star { position: absolute; background: #fff; border-radius: 50%; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="canvas"></canvas>
+        <div id="ui">
+            <div class="stat"><span class="stat-label">Ship:</span> <span class="stat-value" id="shipName">Nebula StarShip</span></div>
+            <div class="stat"><span class="stat-label">Credits:</span> <span class="stat-value" id="credits">0</span></div>
+            <div class="stat"><span class="stat-label">Level:</span> <span class="stat-value" id="level">1</span></div>
+            <div class="stat"><span class="stat-label">Fuel:</span> <span class="stat-value" id="fuel">100%</span></div>
+            <div class="stat"><span class="stat-label">Altitude:</span> <span class="stat-value" id="altitude">0 km</span></div>
+            <div class="stat"><span class="stat-label">Speed:</span> <span class="stat-value" id="speed">0</span></div>
+            <div class="stat"><span class="stat-label">Moon Visits:</span> <span class="stat-value" id="moonVisits">0</span></div>
+        </div>
+        <div id="upgradePanel">
+            <div style="margin-bottom: 15px; border-bottom: 1px solid #0ff; padding-bottom: 10px;">UPGRADES</div>
+            <div class="upgradeItem" onclick="game.buyUpgrade('fuel')">
+                Fuel Tank+ <br><span class="upgradeCost">Cost: <span id="cost-fuel">100</span>¢</span>
+            </div>
+            <div class="upgradeItem" onclick="game.buyUpgrade('speed')">
+                Thruster+ <br><span class="upgradeCost">Cost: <span id="cost-speed">150</span>¢</span>
+            </div>
+            <div class="upgradeItem" onclick="game.buyUpgrade('turnRate')">
+                Control+ <br><span class="upgradeCost">Cost: <span id="cost-turnRate">120</span>¢</span>
+            </div>
+            <div class="upgradeItem" onclick="game.changeShip()">
+                Change Ship <br><span class="upgradeCost">Switch vessel</span>
+            </div>
+        </div>
+        <div class="controls">
+            <div class="control-line"><strong>CONTROLS</strong></div>
+            <div class="control-line">W/A/S/D - Move</div>
+            <div class="control-line">Q - Roll Left</div>
+            <div class="control-line">E - Roll Right</div>
+            <div class="control-line">SPACE - Boost</div>
+        </div>
+        <div id="shipSelect">
+            <h1>⚡ SELECT YOUR SHIP ⚡</h1>
+            <div class="shipOption" onclick="game.selectShip('nebulaStar')">
+                🚀 Nebula StarShip<br>
+                <div class="shipStats">Speed: ⭐ | Fuel: ⭐⭐⭐⭐⭐</div>
+            </div>
+            <div class="shipOption" onclick="game.selectShip('nebulaPro')">
+                🚀 Nebula ProShip<br>
+                <div class="shipStats">Speed: ⭐⭐ | Fuel: ⭐⭐⭐⭐</div>
+            </div>
+            <div class="shipOption" onclick="game.selectShip('quantamStar')">
+                🚀 QuantamStarship<br>
+                <div class="shipStats">Speed: ⭐⭐⭐ | Fuel: ⭐⭐⭐</div>
+            </div>
+            <div class="shipOption" onclick="game.selectShip('quantamPro')">
+                🚀 QuantamProShip<br>
+                <div class="shipStats">Speed: ⭐⭐⭐⭐⭐ | Fuel: ⭐⭐</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const SHIPS = {
+            nebulaStar: { name: 'Nebula StarShip', speed: 2, acceleration: 0.3, turnRate: 2, fuel: 1000, fuelConsume: 0.2, color: '#0f0' },
+            nebulaPro: { name: 'Nebula ProShip', speed: 3, acceleration: 0.4, turnRate: 2.5, fuel: 800, fuelConsume: 0.25, color: '#0ff' },
+            quantamStar: { name: 'QuantamStarship', speed: 5, acceleration: 0.6, turnRate: 3, fuel: 600, fuelConsume: 0.3, color: '#f0f' },
+            quantamPro: { name: 'QuantamProShip', speed: 7, acceleration: 0.8, turnRate: 3.5, fuel: 400, fuelConsume: 0.4, color: '#ff0' }
+        };
+
+        const game = {
+            ship: null,
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            vx: 0,
+            vy: 0,
+            angle: 0,
+            roll: 0,
+            fuel: 1000,
+            maxFuel: 1000,
+            credits: 0,
+            level: 1,
+            altitude: 0,
+            moonVisits: 0,
+            keys: {},
+            upgrades: { fuel: 0, speed: 0, turnRate: 0 },
+            particles: [],
+            stars: [],
+            moonVisible: false,
+            moonX: 0,
+            moonY: 0,
+
+            selectShip(shipKey) {
+                this.ship = { ...SHIPS[shipKey], key: shipKey };
+                this.fuel = this.ship.fuel;
+                this.maxFuel = this.ship.fuel;
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.vx = 0;
+                this.vy = 0;
+                this.angle = 0;
+                document.getElementById('shipSelect').style.display = 'none';
+                this.generateStars();
+                this.updateUI();
+            },
+
+            changeShip() {
+                document.getElementById('shipSelect').style.display = 'block';
+            },
+
+            generateStars() {
+                this.stars = [];
+                for (let i = 0; i < 200; i++) {
+                    this.stars.push({
+                        x: Math.random() * canvas.width * 2 - canvas.width,
+                        y: Math.random() * canvas.height * 2 - canvas.height,
+                        size: Math.random() * 1.5,
+                        opacity: Math.random() * 0.7 + 0.3
+                    });
+                }
+            },
+
+            buyUpgrade(type) {
+                const costs = { fuel: 100 * Math.pow(1.5, this.upgrades[type]), speed: 150 * Math.pow(1.5, this.upgrades[type]), turnRate: 120 * Math.pow(1.5, this.upgrades[type]) };
+                if (this.credits >= costs[type]) {
+                    this.credits -= costs[type];
+                    this.upgrades[type]++;
+                    if (type === 'fuel') this.maxFuel += 200;
+                    if (type === 'speed') this.ship.speed += 1;
+                    if (type === 'turnRate') this.ship.turnRate += 0.5;
+                    this.updateUI();
+                }
+            },
+
+            update() {
+                if (!this.ship) return;
+
+                const speedMult = 1 + (this.upgrades.speed * 0.2);
+                const turnMult = 1 + (this.upgrades.turnRate * 0.1);
+
+                if (this.keys['w']) { this.vx += Math.cos(this.angle) * this.ship.acceleration * speedMult; this.vy += Math.sin(this.angle) * this.ship.acceleration * speedMult; }
+                if (this.keys['s']) { this.vx -= Math.cos(this.angle) * this.ship.acceleration * speedMult * 0.5; this.vy -= Math.sin(this.angle) * this.ship.acceleration * speedMult * 0.5; }
+                if (this.keys['a']) this.angle -= (this.ship.turnRate * turnMult) * Math.PI / 180;
+                if (this.keys['d']) this.angle += (this.ship.turnRate * turnMult) * Math.PI / 180;
+                if (this.keys['q']) this.roll -= 5;
+                if (this.keys['e']) this.roll += 5;
+                if (this.keys[' ']) { this.vx *= 1.05; this.vy *= 1.05; this.fuel -= 2; }
+
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+                this.roll *= 0.9;
+
+                if (this.keys['w'] || this.keys['s']) this.fuel -= this.ship.fuelConsume + (this.upgrades.fuel * 0.01);
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                this.altitude = Math.sqrt((this.x - canvas.width / 2) ** 2 + (this.y - canvas.height / 2) ** 2);
+                if (this.altitude > 3000) this.moonVisible = true;
+
+                if (this.moonVisible) {
+                    const angle = Math.atan2(this.y - canvas.height / 2, this.x - canvas.width / 2);
+                    this.moonX = canvas.width / 2 + Math.cos(angle) * 2000;
+                    this.moonY = canvas.height / 2 + Math.sin(angle) * 2000;
+
+                    const distToMoon = Math.sqrt((this.x - this.moonX) ** 2 + (this.y - this.moonY) ** 2);
+                    if (distToMoon < 100) {
+                        this.moonVisits++;
+                        this.credits += this.level * 1000;
+                        this.level += 1;
+                        this.x = canvas.width / 2;
+                        this.y = canvas.height / 2;
+                        this.vx = 0;
+                        this.vy = 0;
+                        this.fuel = this.maxFuel;
+                        this.moonVisible = false;
+                    }
+                }
+
+                this.fuel = Math.max(0, this.fuel);
+                if (this.fuel === 0) { this.vx *= 0.95; this.vy *= 0.95; }
+
+                this.credits += this.level * 0.01 * (this.altitude / 1000 + 1);
+
+                for (let p of this.particles) {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life--;
+                }
+                this.particles = this.particles.filter(p => p.life > 0);
+
+                if ((this.keys['w'] || this.keys[' ']) && Math.random() < 0.3) {
+                    this.particles.push({
+                        x: this.x - Math.cos(this.angle) * 15,
+                        y: this.y - Math.sin(this.angle) * 15,
+                        vx: (Math.random() - 0.5) * 2 - Math.cos(this.angle) * 1,
+                        vy: (Math.random() - 0.5) * 2 - Math.sin(this.angle) * 1,
+                        life: 30,
+                        color: this.keys[' '] ? '#ff0' : '#0ff'
+                    });
+                }
+
+                this.updateUI();
+            },
+
+            draw() {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const camX = this.x - canvas.width / 2;
+                const camY = this.y - canvas.height / 2;
+
+                ctx.fillStyle = '#333';
+                for (let star of this.stars) {
+                    const sx = star.x - camX;
+                    const sy = star.y - camY;
+                    ctx.globalAlpha = star.opacity;
+                    ctx.fillRect(sx, sy, star.size, star.size);
+                }
+                ctx.globalAlpha = 1;
+
+                if (this.moonVisible) {
+                    const moonScreenX = this.moonX - camX;
+                    const moonScreenY = this.moonY - camY;
+                    ctx.fillStyle = '#ccc';
+                    ctx.beginPath();
+                    ctx.arc(moonScreenX, moonScreenY, 60, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#999';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                for (let p of this.particles) {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life / 30;
+                    ctx.fillRect(p.x - camX, p.y - camY, 3, 3);
+                }
+                ctx.globalAlpha = 1;
+
+                const shipScreenX = canvas.width / 2;
+                const shipScreenY = canvas.height / 2;
+
+                ctx.save();
+                ctx.translate(shipScreenX, shipScreenY);
+                ctx.rotate(this.angle);
+                ctx.rotate((this.roll * Math.PI) / 180 * 0.3);
+
+                ctx.fillStyle = this.ship.color;
+                ctx.beginPath();
+                ctx.moveTo(20, 0);
+                ctx.lineTo(-10, -10);
+                ctx.lineTo(-5, 0);
+                ctx.lineTo(-10, 10);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.restore();
+
+                ctx.fillStyle = '#0ff';
+                ctx.font = '14px Arial';
+                ctx.fillText(`Fuel: ${Math.floor(this.fuel)}/${Math.floor(this.maxFuel)}`, 10, 20);
+            },
+
+            updateUI() {
+                document.getElementById('shipName').textContent = this.ship?.name || 'None';
+                document.getElementById('credits').textContent = Math.floor(this.credits);
+                document.getElementById('level').textContent = this.level;
+                document.getElementById('fuel').textContent = Math.floor((this.fuel / this.maxFuel) * 100) + '%';
+                document.getElementById('altitude').textContent = Math.floor(this.altitude);
+                document.getElementById('speed').textContent = Math.floor(Math.sqrt(this.vx ** 2 + this.vy ** 2));
+                document.getElementById('moonVisits').textContent = this.moonVisits;
+
+                const fuelCost = Math.floor(100 * Math.pow(1.5, this.upgrades.fuel));
+                const speedCost = Math.floor(150 * Math.pow(1.5, this.upgrades.speed));
+                const turnCost = Math.floor(120 * Math.pow(1.5, this.upgrades.turnRate));
+                document.getElementById('cost-fuel').textContent = fuelCost;
+                document.getElementById('cost-speed').textContent = speedCost;
+                document.getElementById('cost-turnRate').textContent = turnCost;
+            }
+        };
+
+        document.addEventListener('keydown', (e) => { game.keys[e.key.toLowerCase()] = true; });
+        document.addEventListener('keyup', (e) => { game.keys[e.key.toLowerCase()] = false; });
+
+        document.getElementById('shipSelect').style.display = 'block';
+
+        function gameLoop() {
+            game.update();
+            game.draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
