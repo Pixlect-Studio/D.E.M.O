@@ -7,56 +7,96 @@ let starField;
 function initThreeJS() {
     // Scene
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
-    scene.fog = new THREE.Fog(0x000000, 5000, 10000);
+    scene.background = new THREE.Color(0x000011);
+    scene.fog = new THREE.Fog(0x000011, 5000, 15000);
 
     // Camera
     camera = new THREE.PerspectiveCamera(
         75,
         window.innerWidth / window.innerHeight,
         0.1,
-        10000
+        50000
     );
-    camera.position.z = 50;
+    camera.position.set(0, 50, 80);
+    camera.lookAt(0, 0, 0);
 
     // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    const canvas = document.getElementById('canvas');
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    document.getElementById('gameContainer').appendChild(renderer.domElement);
+    renderer.shadowMap.enabled = true;
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 10, 7);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    directionalLight.position.set(500, 500, 500);
+    directionalLight.castShadow = true;
     scene.add(directionalLight);
 
     // Create Starfield
     createStarfield();
 
+    // Create Earth
+    createEarth();
+
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
 }
 
+function createEarth() {
+    const earthGeometry = new THREE.SphereGeometry(200, 64, 64);
+    const earthMaterial = new THREE.MeshPhongMaterial({
+        color: 0x1a5f7a,
+        emissive: 0x111111,
+        shininess: 5
+    });
+    const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+    earth.position.y = -300;
+    earth.castShadow = true;
+    earth.receiveShadow = true;
+    scene.add(earth);
+
+    // Add some continents (simple green spots)
+    const continentGeometry = new THREE.SphereGeometry(200, 64, 64);
+    const continentMaterial = new THREE.MeshPhongMaterial({
+        color: 0x2d5a2d,
+        emissive: 0x0a0a0a
+    });
+    const continents = new THREE.Mesh(continentGeometry, continentMaterial);
+    continents.position.y = -300;
+    continents.scale.set(0.99, 0.99, 0.99);
+    scene.add(continents);
+}
+
 function createStarfield() {
     const starGeometry = new THREE.BufferGeometry();
-    const starCount = 1000;
+    const starCount = 2000;
     const positions = new Float32Array(starCount * 3);
+    const colors = new Float32Array(starCount * 3);
 
-    for (let i = 0; i < starCount * 3; i += 3) {
-        positions[i] = (Math.random() - 0.5) * 20000;
-        positions[i + 1] = (Math.random() - 0.5) * 20000;
-        positions[i + 2] = (Math.random() - 0.5) * 20000;
+    for (let i = 0; i < starCount; i++) {
+        const i3 = i * 3;
+        positions[i3] = (Math.random() - 0.5) * 40000;
+        positions[i3 + 1] = (Math.random() - 0.5) * 40000;
+        positions[i3 + 2] = (Math.random() - 0.5) * 40000;
+
+        // Vary star colors
+        const brightness = Math.random();
+        colors[i3] = brightness;
+        colors[i3 + 1] = brightness;
+        colors[i3 + 2] = brightness;
     }
 
     starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const starMaterial = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 15,
-        sizeAttenuation: true
+        size: 20,
+        sizeAttenuation: true,
+        vertexColors: true
     });
 
     starField = new THREE.Points(starGeometry, starMaterial);
@@ -70,35 +110,47 @@ function createShip(color) {
 
     // Main body (cone shape)
     const coneGeometry = new THREE.ConeGeometry(8, 30, 8);
-    const shipMaterial = new THREE.MeshPhongMaterial({ color: color, emissive: color, emissiveIntensity: 0.5 });
+    const shipMaterial = new THREE.MeshPhongMaterial({ 
+        color: color, 
+        emissive: color, 
+        emissiveIntensity: 0.3,
+        wireframe: false
+    });
     const cone = new THREE.Mesh(coneGeometry, shipMaterial);
     cone.rotation.z = Math.PI / 2;
+    cone.castShadow = true;
     group.add(cone);
 
     // Thrusters (small cubes on sides)
     const thrusterGeometry = new THREE.BoxGeometry(3, 3, 8);
-    const thrusterMaterial = new THREE.MeshPhongMaterial({ color: 0xff6600 });
+    const thrusterMaterial = new THREE.MeshPhongMaterial({ color: 0xff6600, emissive: 0xff3300 });
 
     const thruster1 = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
     thruster1.position.set(10, 5, 0);
+    thruster1.castShadow = true;
     group.add(thruster1);
 
     const thruster2 = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
     thruster2.position.set(10, -5, 0);
+    thruster2.castShadow = true;
     group.add(thruster2);
 
     // Glow effect
-    const glowGeometry = new THREE.SphereGeometry(12, 32, 32);
+    const glowGeometry = new THREE.SphereGeometry(15, 16, 16);
     const glowMaterial = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
-        opacity: 0.2
+        opacity: 0.15
     });
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
     group.add(glow);
 
+    // Position ship above earth
+    group.position.y = 100;
+
     scene.add(group);
     shipMesh = group;
+    console.log('Ship created at:', group.position);
     return group;
 }
 
@@ -117,6 +169,7 @@ function createMoon() {
     moonMesh.receiveShadow = true;
     scene.add(moonMesh);
 
+    console.log('Moon created');
     return moonMesh;
 }
 
@@ -168,7 +221,7 @@ const SHIPS = {
 
 const gameInstance = {
     ship: null,
-    position: new THREE.Vector3(0, 0, 0),
+    position: new THREE.Vector3(0, 100, 0),
     velocity: new THREE.Vector3(0, 0, 0),
     rotation: new THREE.Euler(0, 0, 0),
     roll: 0,
@@ -187,11 +240,11 @@ const gameInstance = {
         this.ship = { ...SHIPS[shipKey], key: shipKey };
         this.fuel = this.ship.fuel;
         this.maxFuel = this.ship.fuel;
-        this.position.set(0, 0, 0);
+        this.position.set(0, 100, 0);
         this.velocity.set(0, 0, 0);
         this.rotation.set(0, 0, 0);
         this.roll = 0;
-        this.altitude = 0;
+        this.altitude = 100;
         this.credits = 0;
         this.level = 1;
         this.moonVisits = 0;
@@ -205,6 +258,7 @@ const gameInstance = {
         const colorHex = this.ship.color;
         createShip(colorHex);
 
+        console.log('Ship selected:', shipKey);
         document.getElementById('shipSelect').style.display = 'none';
         this.updateUI();
     },
@@ -259,7 +313,7 @@ const gameInstance = {
             this.fuel -= 2;
         }
 
-        // Suction (downward pull)
+        // Suction (upward pull to go up faster)
         if (this.keys['shift']) {
             this.velocity.y += 0.8;
             this.fuel -= 1.5;
@@ -277,9 +331,9 @@ const gameInstance = {
         // Update position
         this.position.add(this.velocity);
 
-        // Calculate altitude
+        // Calculate altitude (distance from earth center)
         this.altitude = this.position.length();
-        if (this.altitude > 3000) this.moonVisible = true;
+        if (this.altitude > 1000) this.moonVisible = true;
 
         // Moon collision
         if (this.moonVisible) {
@@ -294,7 +348,7 @@ const gameInstance = {
                 this.moonVisits++;
                 this.credits += this.level * 1000;
                 this.level += 1;
-                this.position.set(0, 0, 0);
+                this.position.set(0, 100, 0);
                 this.velocity.set(0, 0, 0);
                 this.fuel = this.maxFuel;
                 this.moonVisible = false;
@@ -309,7 +363,7 @@ const gameInstance = {
         }
 
         // Passive income
-        this.credits += this.level * 0.01 * (this.altitude / 1000 + 1);
+        this.credits += this.level * 0.01 * (this.altitude / 500 + 1);
 
         // Update ship mesh
         if (shipMesh) {
@@ -369,9 +423,13 @@ function gameLoop() {
 
     // Update camera to follow ship
     if (shipMesh) {
-        const cameraOffset = new THREE.Vector3(0, 30, 60);
-        const worldPos = cameraOffset.clone().applyEuler(gameInstance.rotation);
-        camera.position.lerp(gameInstance.position.clone().add(worldPos), 0.1);
+        const cameraDistance = 100;
+        const cameraHeight = 50;
+        const cameraOffset = new THREE.Vector3(0, cameraHeight, cameraDistance);
+        cameraOffset.applyEuler(gameInstance.rotation);
+        
+        const targetCameraPos = gameInstance.position.clone().add(cameraOffset);
+        camera.position.lerp(targetCameraPos, 0.1);
         camera.lookAt(gameInstance.position);
     }
 
@@ -379,4 +437,5 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+console.log('Game initialized, waiting for ship selection...');
 gameLoop();
